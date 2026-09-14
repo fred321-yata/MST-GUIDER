@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>School Guider — offline campus engine self-test</title>
+<style>
+  body { font-family: Consolas, monospace; background: #0b1620; color: #cfe8dd; padding: 24px; }
+  h1 { font-size: 16px; color: #f2b45e; }
+  .pass { color: #65df8b; } .fail { color: #ff6d63; } .mode { color: #77e6d0; }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<h1>School Guider campus engine self-test</h1>
+<p class="mode" id="mode">loading…</p>
+<ol id="results"></ol>
+<script type="module">
+  const results = []
+  const list = document.getElementById('results')
+  document.getElementById('mode').textContent = 'importing real src modules via Vite…'
+
+  const add = (name, ok, detail) => {
+    results.push({ name, ok, detail })
+    const li = document.createElement('li')
+    li.innerHTML = `<span class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'FAIL'}</span> ${name}${detail ? ' — ' + detail : ''}`
+    list.appendChild(li)
+  }
+
+  try {
+    const geo = await import('/src/campus/geo.ts')
+    const model = await import('/src/campus/model.ts')
+    const routing = await import('/src/campus/routing.ts')
+
+    document.getElementById('mode').textContent = 'mode: production modules (same ones bundled into the APK)'
+
+    // 1. Projection roundtrip: image percent -> GPS -> image percent must be stable.
+    const percent = { x: 72.5, y: 31.4 }
+    const gps = geo.gpsFromImagePercent(percent)
+    const round = geo.imagePercentFromGps(gps)
+    const drift = Math.hypot(round.x - percent.x, round.y - percent.y)
+    add('image↔GPS projection roundtrip', drift < 0.01, `drift=${drift.toFixed(5)}% (${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)})`)
+
+    // 2. Anchor roundtrips: known GPS ↔ image positions must match exactly.
+    const ra = geo.imagePercentFromGps(geo.CAMPUS_GEO.anchorA.gps)
+    const rb = geo.imagePercentFromGps(geo.CAMPUS_GEO.anchorB.gps)
+    const driftA = ra && Math.hypot(ra.x - geo.CAMPUS_GEO.anchorA.image.x, ra.y - geo.CAMPUS_GEO.anchorA.image.y)
+    const driftB = rb && Math.hypot(rb.x - geo.CAMPUS_GEO.anchorB.image.x, rb.y - geo.CAMPUS_GEO.anchorB.image.y)
+    add('anchor A roundtrip (verified MST GPS)', driftA !== null && driftA < 0.01, `drift=${driftA === null ? 'n/a' : driftA.toFixed(5)}%`)
+    add('anchor B roundtrip (main gate)', driftB !== null && driftB < 0.01, `drift=${driftB === null ? 'n/a' : driftB.toFixed(5)}%`)
+
+    // 3. Geofence: anchor inside, far point outside.
+    const inside = geo.isInsideCampus(geo.CAMPUS_GEO.anchorA.gps)
+    const outside = geo.isInsideCampus({ latitude: 6.36, longitude: 124.95 })
+    add('campus geofence boundary', inside === true && outside === false, `inside=${inside} farOutside=${outside}`)
+
+    // 4. Distance sanity: +0.02° longitude ≈ 2.2 km at this latitude.
+    const far = geo.distanceInMeters(geo.CAMPUS_GEO.anchorA.gps, { latitude: geo.CAMPUS_GEO.anchorA.gps.latitude, longitude: geo.CAMPUS_GEO.anchorA.gps.longitude + 0.02 })
+    add('haversine distance in range', far > 1800 && far < 2600, `${far.toFixed(0)} m`)
+
+    // 5. Routing: gate -> MST entrance exists and is ordered correctly.
+    const route = routing.findRoute('gate', 'mst-entrance')
+    add('route gate→MST entrance exists', !!route, route ? `${route.nodeIds.join('→')} · ${route.totalDistance.toFixed(0)} m` : 'null')
+
+    // 6. Route total distance is plausible for a small campus (30 m … 1 km).
+    add('route distance plausible', !!route && route.totalDistance > 15 && route.totalDistance < 1000, route ? `${route.totalDistance.toFixed(0)} m` : '-')
+
+    // 7. Turn steps: depart + turns + arrive, matching legs.
+    const steps = route ? routing.buildTurnSteps(route) : []
+    const expected = route ? route.legs.length + 1 : 0
+    add('turn-by-turn steps count', steps.length === expected, `${steps.length} steps (legs=${route ? route.legs.length : 0})`)
+    add('steps start depart / end arrive', steps[0]?.action === 'depart' && steps[steps.length - 1]?.action === 'arrive', steps.map((s) => s.action).join(','))
+
+    // 8. Walker at the gate: remaining ≈ full route; walker at entrance: ≈ 0.
+    const gateGps = geo.gpsFromImagePercent({ x: 50, y: 93 })
+    const atGate = route ? routing.walkProgress(route, gateGps) : null
+    const atEnd = route ? routing.walkProgress(route, geo.gpsFromImagePercent({ x: 50, y: 49.5 })) : null
+    add('progress at start ≈ total', !!atGate && Math.abs(atGate.remaining - route.totalDistance) < 15, `${atGate ? atGate.remaining.toFixed(0) : '-'} m vs ${route ? route.totalDistance.toFixed(0) : '-'} m`)
+    add('progress at end ≈ 0', !!atEnd && atEnd.remaining < 5, `${atEnd ? atEnd.remaining.toFixed(0) : '-'} m`)
+
+    // 9. Off-route detection: a point far east of the walkway.
+    const off = route ? routing.walkProgress(route, geo.gpsFromImagePercent({ x: 15, y: 40 })) : null
+    add('off-route distance detected', !!off && off.offRoute > 25, `${off ? off.offRoute.toFixed(0) : '-'} m off path`)
+
+    // 10. Search finds places and routes resolve from search targets.
+    const hits = model.searchCampus('mst')
+    const target = hits.length ? model.targetForHit(hits[0]) : null
+    const routeFromSearch = target ? routing.findRoute('gate', target.nodeId) : null
+    add('search + route from search hit', hits.length > 0 && !!routeFromSearch, `${hits.length} hits · ${routeFromSearch ? routeFromSearch.totalDistance.toFixed(0) + ' m' : 'no route'}`)
+
+    // 11. Demo waypoints convert to real GPS inside campus bounds.
+    const demoGps = geo.gpsFromImagePercent({ x: 50, y: 93 })
+    add('demo walk starts inside campus', geo.isInsideCampus(demoGps), `${demoGps.latitude.toFixed(6)}, ${demoGps.longitude.toFixed(6)}`)
+
+    // 12. Model integrity: every edge references existing nodes; every place/room node exists.
+    const nodeIds = new Set(model.CAMPUS_NODES.map((n) => n.id))
+    const edgesOk = model.CAMPUS_EDGES.every(([a, b]) => nodeIds.has(a) && nodeIds.has(b))
+    const placeNodesOk = model.CAMPUS_PLACES.every((p) => nodeIds.has(p.nodeId))
+    const roomNodesOk = model.CAMPUS_ROOMS.every((r) => nodeIds.has(r.nodeId))
+    add('data integrity (nodes/edges/places/rooms)', edgesOk && placeNodesOk && roomNodesOk, `${model.CAMPUS_NODES.length} nodes · ${model.CAMPUS_EDGES.length} edges`)
+
+    // ── Indoor blueprint engine (MST building, 4 floors) ──
+    const indoor = await import('/src/campus/indoor.ts')
+
+    // 13. Data integrity: every room's hallway node exists in every floor graph.
+    const indoorRooms = indoor.INDOOR_ROOMS
+    const indoorNodeIds = new Set(indoor.HALLWAY_NODE_IDS)
+    const roomNodesOk2 = indoorRooms.every((room) => indoorNodeIds.has(room.nodeId))
+    const floorsOk = indoorRooms.every((room) => room.floor >= 1 && room.floor <= 4)
+    const rectsOk = indoorRooms.every((r) => r.rect.w > 0 && r.rect.h > 0 && r.rect.x >= 0 && r.rect.y >= 0)
+    add('indoor data integrity (nodes/floors/rects)', roomNodesOk2 && floorsOk && rectsOk, `${indoorRooms.length} rooms on floors ${[...new Set(indoorRooms.map((r) => r.floor))].sort().join(',')}`)
+
+    // 14. Same-floor route: main entrance -> CLINIC stays on floor 1.
+    const clinicRoute = indoor.findIndoorRoute(null, 'clinic')
+    add('indoor route entrance→CLINIC (same floor)', !!clinicRoute && clinicRoute.floorsVisited.length === 1 && clinicRoute.floorsVisited[0] === 1, clinicRoute ? `${clinicRoute.totalDistance.toFixed(0)} units · ${clinicRoute.steps.length} steps` : 'null')
+
+    // 15. Cross-floor route: entrance -> MST 401 must climb 4 floors via stairs.
+    const mst401Route = indoor.findIndoorRoute(null, 'mst-401')
+    const stairsSteps = mst401Route ? mst401Route.steps.filter((s) => s.action === 'stairs-up').length : 0
+    add('indoor route entrance→MST 401 uses stairs', !!mst401Route && mst401Route.floorsVisited.length === 4 && stairsSteps === 3, mst401Route ? `floors ${mst401Route.floorsVisited.join(',')} · ${stairsSteps} stair steps` : 'null')
+
+    // 16. Room-to-room route CLINIC (1F) -> MST 401 (4F) exists with depart+arrive.
+    const roomToRoom = indoor.findIndoorRoute('clinic', 'mst-401')
+    const okSteps = roomToRoom && roomToRoom.steps[0].action === 'depart' && roomToRoom.steps[roomToRoom.steps.length - 1].action === 'arrive'
+    add('indoor route CLINIC→MST 401 (room to room)', !!roomToRoom && okSteps && roomToRoom.fromRoom?.id === 'clinic', roomToRoom ? `${roomToRoom.steps.map((s) => s.action).join(',')}` : 'null')
+
+    // 17. Route geometry extends into the destination room (visible on the blueprint).
+    const lastSeg = mst401Route ? mst401Route.segments[mst401Route.segments.length - 1] : null
+    const lastPoint = lastSeg ? lastSeg.points[lastSeg.points.length - 1] : null
+    const mst401 = indoorRooms.find((r) => r.id === 'mst-401')
+    const insideRect = lastPoint && mst401 && lastPoint.x >= mst401.rect.x && lastPoint.x <= mst401.rect.x + mst401.rect.w && lastPoint.y >= mst401.rect.y && lastPoint.y <= mst401.rect.y + mst401.rect.h
+    add('indoor route reaches into destination room', !!insideRect, lastPoint ? `end (${lastPoint.x.toFixed(1)}, ${lastPoint.y.toFixed(1)}) in MST 401 rect` : 'null')
+
+    // 18. Search finds rooms across floors.
+    const roomHits = indoor.searchIndoorRooms('mst 2')
+    const hitFloors = [...new Set(roomHits.map((r) => r.floor))].sort().join(',')
+    add('indoor room search', roomHits.length >= 5 && hitFloors.includes('2'), `${roomHits.length} hits on floors ${hitFloors}`)
+  } catch (error) {
+    add('module import / compile', false, String(error))
+  }
+
+  const failed = results.filter((r) => !r.ok).length
+  const summary = failed === 0 ? `ALL ${results.length} PASSED` : `${failed}/${results.length} FAILED`
+  const p = document.createElement('p')
+  p.className = failed === 0 ? 'pass' : 'fail'
+  p.textContent = `RESULT: ${summary}`
+  document.body.appendChild(p)
+  document.title = failed === 0 ? 'SELFTEST-PASS' : 'SELFTEST-FAIL'
+</script>
+</body>
+</html>

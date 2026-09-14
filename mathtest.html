@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Campus engine math verification</title>
+<style>
+  body { font-family: Consolas, monospace; background: #0b1620; color: #cfe8dd; padding: 24px; line-height: 1.5; }
+  h1 { font-size: 16px; color: #f2b45e; }
+  .pass { color: #65df8b; font-weight: bold; } .fail { color: #ff6d63; font-weight: bold; }
+  .note { color: #8fb3a3; font-size: 12px; max-width: 720px; }
+  li { margin: 6px 0; }
+  .detail { color: #9fc4b4; }
+</style>
+</head>
+<body>
+<h1>Campus engine math verification (inline mirror of src/campus)</h1>
+<p class="note">This page mirrors the exact constants and algorithms from <b>src/campus/geo.ts</b>, <b>model.ts</b> and <b>routing.ts</b> to validate the math offline. The identical assertions against the real TypeScript modules live in <b>selftest.html</b> (open via <code>npm run dev</code> → <code>/selftest.html</code>).</p>
+<ol id="results"></ol>
+<script>
+'use strict'
+const results = []
+const list = document.getElementById('results')
+function add(name, ok, detail) {
+  results.push({ name, ok })
+  const li = document.createElement('li')
+  li.innerHTML = `<span class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'FAIL'}</span> ${name} <span class="detail">— ${detail}</span>`
+  list.appendChild(li)
+}
+
+/* ══ Mirror of geo.ts (same constants & formulas) ═══════════════════════ */
+const CAMPUS_GEO = {
+  anchorA: { gps: { latitude: 6.346549, longitude: 124.936164 }, image: { x: 50, y: 49.5 } },
+  anchorB: { gps: { latitude: 6.346285, longitude: 124.936164 }, image: { x: 50, y: 93 } },
+  rotationDegrees: 0,
+  boundary: [
+    { latitude: 6.34619, longitude: 124.93557 },
+    { latitude: 6.34619, longitude: 124.93676 },
+    { latitude: 6.3469, longitude: 124.93676 },
+    { latitude: 6.3469, longitude: 124.93557 },
+  ],
+}
+const CAMPUS_IMAGE_ASPECT = 1414 / 793
+const EARTH_RADIUS = 6371000
+const DEG = Math.PI / 180
+function metersPerDegree(latitude) {
+  return { north: 111132, east: Math.cos(latitude * DEG) * 111320 }
+}
+function toLocalMeters(point) {
+  const scale = metersPerDegree(CAMPUS_GEO.anchorA.gps.latitude)
+  return {
+    x: (point.longitude - CAMPUS_GEO.anchorA.gps.longitude) * scale.east,
+    y: (point.latitude - CAMPUS_GEO.anchorA.gps.latitude) * scale.north,
+  }
+}
+function fromLocalMeters(local) {
+  const scale = metersPerDegree(CAMPUS_GEO.anchorA.gps.latitude)
+  return {
+    latitude: CAMPUS_GEO.anchorA.gps.latitude + local.y / scale.north,
+    longitude: CAMPUS_GEO.anchorA.gps.longitude + local.x / scale.east,
+  }
+}
+function projection() {
+  const A = CAMPUS_GEO.anchorA, B = CAMPUS_GEO.anchorB
+  const a = toLocalMeters(A.gps), b = toLocalMeters(B.gps)
+  const ua = A.image.x * CAMPUS_IMAGE_ASPECT, va = A.image.y
+  const ub = B.image.x * CAMPUS_IMAGE_ASPECT, vb = B.image.y
+  const gpsDistance = Math.hypot(b.x - a.x, b.y - a.y)
+  const squareDistance = Math.hypot(ub - ua, vb - va)
+  if (gpsDistance < 0.5 || squareDistance < 1e-6) return null
+  return { a, ua, va, scale: gpsDistance / squareDistance }
+}
+function imagePercentFromGps(location) {
+  const proj = projection()
+  if (!proj) return null
+  const p = toLocalMeters(location)
+  let de = p.x - proj.a.x, dn = p.y - proj.a.y
+  const rotation = CAMPUS_GEO.rotationDegrees
+  if (rotation) {
+    const r = -rotation * DEG
+    const de2 = de * Math.cos(r) - dn * Math.sin(r)
+    const dn2 = de * Math.sin(r) + dn * Math.cos(r)
+    de = de2; dn = dn2
+  }
+  const qx = proj.ua + de / proj.scale
+  const qy = proj.va - dn / proj.scale
+  return { x: qx / CAMPUS_IMAGE_ASPECT, y: qy }
+}
+function gpsFromImagePercent(percent) {
+  const proj = projection()
+  if (!proj) return CAMPUS_GEO.anchorA.gps
+  const qx = percent.x * CAMPUS_IMAGE_ASPECT, qy = percent.y
+  let de = (qx - proj.ua) * proj.scale, dn = -(qy - proj.va) * proj.scale
+  const rotation = CAMPUS_GEO.rotationDegrees
+  if (rotation) {
+    const r = rotation * DEG
+    const de2 = de * Math.cos(r) - dn * Math.sin(r)
+    const dn2 = de * Math.sin(r) + dn * Math.cos(r)
+    de = de2; dn = dn2
+  }
+  return fromLocalMeters({ x: proj.a.x + de, y: proj.a.y + dn })
+}
+function distanceInMeters(from, to) {
+  const latDelta = (to.latitude - from.latitude) * DEG
+  const lngDelta = (to.longitude - from.longitude) * DEG
+  const lat1 = from.latitude * DEG, lat2 = to.latitude * DEG
+  const a = Math.sin(latDelta / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(lngDelta / 2) ** 2
+  return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+function bearingInDegrees(from, to) {
+  const lat1 = from.latitude * DEG, lat2 = to.latitude * DEG
+  const dLng = (to.longitude - from.longitude) * DEG
+  const x = Math.sin(dLng) * Math.cos(lat2)
+  const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng)
+  return (Math.atan2(x, y) / DEG + 360) % 360
+}
+function isInsideCampus(loc) {
+  const poly = CAMPUS_GEO.boundary
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const pi = poly[i], pj = poly[j]
+    const intersects = (pi.longitude > loc.longitude) !== (pj.longitude > loc.longitude) &&
+      loc.latitude < ((pj.latitude - pi.latitude) * (loc.longitude - pi.longitude)) / (pj.longitude - pi.longitude) + pi.latitude
+    if (intersects) inside = !inside
+  }
+  return inside
+}
+
+/* ══ Mirror of model.ts graph ═══════════════════════════════════════════ */
+const NODES = {
+  'gate': { x: 50, y: 93 }, 'drive-junction': { x: 50, y: 78 },
+  'mst-front': { x: 50, y: 60 }, 'mst-entrance': { x: 50, y: 49.5 },
+  'mst-left-wing': { x: 30, y: 52 }, 'mst-right-wing': { x: 70, y: 52 },
+  'field': { x: 77, y: 71 },
+}
+const EDGES = [
+  ['gate', 'drive-junction'], ['drive-junction', 'mst-front'], ['mst-front', 'mst-entrance'],
+  ['mst-front', 'mst-left-wing'], ['mst-front', 'mst-right-wing'],
+  ['drive-junction', 'field'], ['mst-right-wing', 'field'],
+]
+const nodeGps = (id) => gpsFromImagePercent(NODES[id])
+
+/* ══ Mirror of routing.ts (Dijkstra + progress) ═════════════════════════ */
+function findRoute(fromId, toId) {
+  const dist = {}, prev = {}, Q = new Set(Object.keys(NODES))
+  for (const id of Q) dist[id] = Infinity
+  dist[fromId] = 0; prev[fromId] = null
+  while (Q.size) {
+    let cur = null, best = Infinity
+    for (const id of Q) if (dist[id] < best) { cur = id; best = dist[id] }
+    if (cur === null || best === Infinity) break
+    if (cur === toId) break
+    Q.delete(cur)
+    for (const [a, b] of EDGES) {
+      const other = a === cur ? b : b === cur ? a : null
+      if (!other || !Q.has(other)) continue
+      const cand = dist[cur] + distanceInMeters(nodeGps(cur), nodeGps(other))
+      if (cand < dist[other]) { dist[other] = cand; prev[other] = cur }
+    }
+  }
+  if (!Number.isFinite(dist[toId])) return null
+  const path = []
+  for (let s = toId; s !== null; s = prev[s]) path.unshift(s)
+  const legs = []
+  for (let i = 0; i < path.length - 1; i++) {
+    legs.push({
+      fromId: path[i], toId: path[i + 1],
+      distance: distanceInMeters(nodeGps(path[i]), nodeGps(path[i + 1])),
+      bearing: bearingInDegrees(nodeGps(path[i]), nodeGps(path[i + 1])),
+    })
+  }
+  return { nodeIds: path, legs, total: legs.reduce((s, l) => s + l.distance, 0) }
+}
+function toSeg(p, a, b) {
+  const P = toLocalMeters(p), A = toLocalMeters(a), B = toLocalMeters(b)
+  const abx = B.x - A.x, aby = B.y - A.y
+  const len2 = abx * abx + aby * aby
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((P.x - A.x) * abx + (P.y - A.y) * aby) / len2))
+  return Math.hypot(P.x - (A.x + t * abx), P.y - (A.y + t * aby))
+}
+function walkProgress(route, loc) {
+  let bestIdx = 0, bestOff = Infinity
+  route.legs.forEach((leg, i) => {
+    const off = toSeg(loc, nodeGps(leg.fromId), nodeGps(leg.toId))
+    if (off < bestOff) { bestOff = off; bestIdx = i }
+  })
+  let remaining = distanceInMeters(loc, nodeGps(route.legs[bestIdx].toId))
+  for (let j = bestIdx + 1; j < route.legs.length; j++) remaining += route.legs[j].distance
+  return { remaining, offRoute: bestOff, bearing: route.legs[bestIdx].bearing }
+}
+function turnSteps(route) {
+  const steps = [{ action: 'depart', node: route.legs[0].fromId }]
+  for (let i = 1; i < route.legs.length; i++) {
+    const diff = ((route.legs[i].bearing - route.legs[i - 1].bearing + 540) % 360) - 180
+    steps.push({ action: diff > 45 ? 'right' : diff < -45 ? 'left' : 'straight', node: route.legs[i].fromId })
+  }
+  steps.push({ action: 'arrive', node: route.legs[route.legs.length - 1].toId })
+  return steps
+}
+
+/* ══ Assertions ═════════════════════════════════════════════════════════ */
+// 1. Projection roundtrip
+const p0 = { x: 72.5, y: 31.4 }
+const g0 = gpsFromImagePercent(p0)
+const r0 = imagePercentFromGps(g0)
+const drift = Math.hypot(r0.x - p0.x, r0.y - p0.y)
+add('image ↔ GPS projection roundtrip', drift < 0.01, `drift ${drift.toFixed(6)}% · gps (${g0.latitude.toFixed(6)}, ${g0.longitude.toFixed(6)})`)
+
+// 2. Anchor roundtrips: both anchors must land exactly on their image spots
+const ra = imagePercentFromGps(CAMPUS_GEO.anchorA.gps)
+const rb = imagePercentFromGps(CAMPUS_GEO.anchorB.gps)
+const driftA = Math.hypot(ra.x - CAMPUS_GEO.anchorA.image.x, ra.y - CAMPUS_GEO.anchorA.image.y)
+const driftB = Math.hypot(rb.x - CAMPUS_GEO.anchorB.image.x, rb.y - CAMPUS_GEO.anchorB.image.y)
+add('anchor A roundtrip (verified MST GPS)', driftA < 0.01, `image (${ra.x.toFixed(2)}, ${ra.y.toFixed(2)}) vs (${CAMPUS_GEO.anchorA.image.x}, ${CAMPUS_GEO.anchorA.image.y})`)
+add('anchor B roundtrip (main gate)', driftB < 0.01, `image (${rb.x.toFixed(2)}, ${rb.y.toFixed(2)}) vs (${CAMPUS_GEO.anchorB.image.x}, ${CAMPUS_GEO.anchorB.image.y})`)
+
+// 3. Photo footprint is campus-sized
+const tl = gpsFromImagePercent({ x: 0, y: 0 })
+const br = gpsFromImagePercent({ x: 100, y: 100 })
+const spanM = distanceInMeters(tl, br)
+add('photo covers a campus-sized area (30–400 m diagonal)', spanM > 30 && spanM < 400, `diagonal ≈ ${spanM.toFixed(0)} m`)
+
+// 4. Geofence
+add('geofence: anchor inside, distant point outside', isInsideCampus(CAMPUS_GEO.anchorA.gps) === true && isInsideCampus({ latitude: 6.36, longitude: 124.95 }) === false, 'point-in-polygon works')
+
+// 5. Haversine sanity: +0.02° longitude ≈ 2.2 km at this latitude
+const dFar = distanceInMeters(CAMPUS_GEO.anchorA.gps, { latitude: 6.346549, longitude: 124.956164 })
+add('haversine distance plausible', dFar > 1800 && dFar < 2600, `${dFar.toFixed(0)} m`)
+
+// 6. Gate → MST entrance route
+const route = findRoute('gate', 'mst-entrance')
+add('route gate → MST entrance exists', !!route, route ? route.nodeIds.join(' → ') : 'null')
+
+// 7. Distance plausibility (campus is ~56 m across, so tens of meters)
+add('route total distance plausible (15–1000 m)', !!route && route.total > 15 && route.total < 1000, route ? `${route.total.toFixed(0)} m` : '-')
+
+// 8. Turn steps structure
+const steps = route ? turnSteps(route) : []
+add('turn steps = legs + 1, depart…arrive', route && steps.length === route.legs.length + 1 && steps[0].action === 'depart' && steps[steps.length - 1].action === 'arrive', steps.map((s) => s.action).join(','))
+
+// 9. Progress at start ≈ total; at destination ≈ 0
+const atGate = route ? walkProgress(route, nodeGps('gate')) : null
+const atEnd = route ? walkProgress(route, nodeGps('mst-entrance')) : null
+add('progress at start ≈ total distance', !!atGate && Math.abs(atGate.remaining - route.total) < 12, `${atGate.remaining.toFixed(0)} m vs ${route.total.toFixed(0)} m`)
+add('progress at destination ≈ 0', !!atEnd && atEnd.remaining < 5, `${atEnd.remaining.toFixed(2)} m`)
+
+// 10. Off-route detection far from the walkway (photo corner)
+const off = route ? walkProgress(route, gpsFromImagePercent({ x: 0, y: 2 })) : null
+add('off-route distance detected (> 25 m)', !!off && off.offRoute > 25, `${off.offRoute.toFixed(0)} m off path`)
+
+// 11. Field routes through the graph (connectivity)
+const toField = findRoute('mst-entrance', 'field')
+add('graph connects MST entrance → field', !!toField, toField ? `${toField.nodeIds.join(' → ')} · ${toField.total.toFixed(0)} m` : 'null')
+
+// 12. Bearing: gate → entrance is straight up the photo = north
+const bGate = bearingInDegrees(nodeGps('gate'), nodeGps('mst-entrance'))
+add('gate→entrance bearing is northerly (< 60° or > 300°)', bGate < 60 || bGate > 300, `${bGate.toFixed(1)}°`)
+
+const failed = results.filter((r) => !r.ok).length
+const p = document.createElement('p')
+p.className = failed === 0 ? 'pass' : 'fail'
+p.style.fontSize = '18px'
+p.textContent = failed === 0 ? `✔ ALL ${results.length} CHECKS PASSED` : `✘ ${failed}/${results.length} CHECKS FAILED`
+document.body.appendChild(p)
+document.title = failed === 0 ? 'MATHTEST-PASS' : 'MATHTEST-FAIL'
+</script>
+</body>
+</html>
