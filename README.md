@@ -1,4 +1,4 @@
-# School Guider
+# MST Guider (SEAIT)
 
 Mobile-first **offline campus navigator for SEAIT**. The map is the app's own aerial photo — no Google Maps, no online tiles, no external APIs. Directions are computed by an in-app router over a campus walkway graph.
 

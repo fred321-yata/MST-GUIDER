@@ -198,7 +198,7 @@ function App() {
                 <button className="map-control" onClick={() => setScreen('search')} aria-label="Search places">⌕</button>
                 <button className="map-control" onClick={toggleMapFullscreen} aria-label={isMapFullscreen ? 'Exit fullscreen map' : 'Open fullscreen map'}>{isMapFullscreen ? '×' : '⛶'}</button>
               </div>
-              <div className="map-copy"><span className="status-dot" />School Guider campus map<div className="map-subtitle">Offline · SEAIT campus only</div></div>
+              <div className="map-copy"><span className="status-dot" />MST Guider (SEAIT) campus map<div className="map-subtitle">Offline · SEAIT campus only</div></div>
               <CampusMapCanvas
                 userPercent={userPercent}
                 route={null}
@@ -605,7 +605,7 @@ function useSimulatedWalk(active: boolean, waypoints: LatLng[]) {
 
 function LoadingScreen() {
   return (
-    <main className="loading-screen" aria-label="Loading School Guider">
+    <main className="loading-screen" aria-label="Loading MST Guider (SEAIT)">
       <img className="loading-building" src="/campus-aerial.jpg.png" alt="SEAIT campus aerial view" />
       <div className="loading-shade" />
       <div className="loading-content">
@@ -613,7 +613,7 @@ function LoadingScreen() {
         <div className="loading-logo-wrap">
           <img className="loading-logo" src="/publicseait-logo.png.jpg" alt="SEAIT logo" onError={(event) => { event.currentTarget.style.display = 'none' }} />
         </div>
-        <p className="loading-kicker">SCHOOL GUIDER</p>
+        <p className="loading-kicker">MST GUIDER (SEAIT)</p>
         <h1>SEAIT</h1>
         <div className="loading-progress" aria-hidden="true"><span /></div>
         <p className="loading-status">Preparing your campus guide</p>
