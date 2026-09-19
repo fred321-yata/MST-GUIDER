@@ -228,8 +228,22 @@ function App() {
                 <button className="map-control" onClick={() => setScreen('search')} aria-label="Search places">⌕</button>
                 <button className="map-control" onClick={toggleMapFullscreen} aria-label={isMapFullscreen ? 'Exit fullscreen map' : 'Open fullscreen map'}>{isMapFullscreen ? '×' : '⛶'}</button>
               </div>
+<<<<<<< HEAD
               <div className="map-copy"><span className="status-dot" />School Guider campus map<div className="map-subtitle">Offline · SEAIT campus only</div></div>
               <CampusMapCanvas userPercent={userPercent} route={null} destinationPercent={null} />
+=======
+              <div className="map-copy"><span className="status-dot" />MST Guider (SEAIT) campus map<div className="map-subtitle">Offline · SEAIT campus only</div></div>
+              <CampusMapCanvas
+                userPercent={userPercent}
+                route={null}
+                destinationPercent={null}
+                showPlaceMarkers
+                onPlaceMarker={(placeId) => {
+                  const place = CAMPUS_PLACES.find((candidate) => candidate.id === placeId)
+                  if (place) openPlace({ kind: 'place', place })
+                }}
+              />
+>>>>>>> ca4d63884d618c1448279f43804571e2122d3c67
             </section>
 
             <section className="front-view-card panel-enter" aria-label="SEAIT front view">
@@ -606,8 +620,13 @@ function useSimulatedWalk(active: boolean, waypoints: LatLng[]) {
 
 function LoadingScreen() {
   return (
+<<<<<<< HEAD
     <main className="loading-screen" aria-label="Loading School Guider">
       <img className="loading-building" src={publicAsset('campus-aerial.jpg.png')} alt="SEAIT campus aerial view" />
+=======
+    <main className="loading-screen" aria-label="Loading MST Guider (SEAIT)">
+      <img className="loading-building" src="/campus-aerial.jpg.png" alt="SEAIT campus aerial view" />
+>>>>>>> ca4d63884d618c1448279f43804571e2122d3c67
       <div className="loading-shade" />
       <div className="loading-content">
         <video className="loading-intro-video" src={publicAsset('publicintro-video.mp4.mp4')} autoPlay muted loop playsInline aria-label="SEAIT introduction video" onError={(event) => { event.currentTarget.style.display = 'none' }} />
@@ -621,7 +640,7 @@ function LoadingScreen() {
             <img className="loading-logo" src={publicAsset('publicseait-logo.png.jpg')} alt="SEAIT logo" onError={(event) => { event.currentTarget.style.display = 'none' }} />
           </div>
         </div>
-        <p className="loading-kicker">SCHOOL GUIDER</p>
+        <p className="loading-kicker">MST GUIDER (SEAIT)</p>
         <h1>SEAIT</h1>
         <p className="loading-status">Preparing your campus guide</p>
       </div>
