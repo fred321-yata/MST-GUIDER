@@ -1,4 +1,5 @@
 import type { LatLng, Point2D } from './geo'
+import { publicAsset } from './assets'
 import { gpsFromImagePercent } from './geo'
 import { INDOOR_ROOMS } from './indoor'
 import type { IndoorRoom } from './indoor'
@@ -109,7 +110,8 @@ export const CAMPUS_ROOMS: CampusRoom[] = [
 /* ── Numbered street-view capture points on the aerial image ──────────────── */
 
 export const STREET_VIEW_POINTS: { point: number; image: Point2D; panorama?: string }[] = [
-  { point: 20, image: { x: 79.8, y: 9.6 }, panorama: '/point-20-360.jpg.jpg' },
+  // Marker sits just left of point 19 (37.8, 68.6) so the ring reads 1…20.
+  { point: 20, image: { x: 30.8, y: 68.6 }, panorama: publicAsset('point-20-360.jpg.jpg') },
   // Add more capture points as 360 photos are taken:
   // { point: 1, image: { x: 56.4, y: 67.8 }, panorama: '/point-1-360.jpg.jpg' },
 ]

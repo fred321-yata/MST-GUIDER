@@ -1,4 +1,5 @@
 import { addEdge, createGraph, shortestPath } from './graph'
+import { publicAsset } from './assets'
 import type { Graph } from './graph'
 import type { Point2D } from './geo'
 
@@ -37,7 +38,12 @@ export type IndoorMarker = {
   color: string
 }
 
-const BLUEPRINT_ASPECT = 713 / 470
+/**
+ * All four floor PNGs are normalized to the same 650x435 frame (see
+ * scripts/normalize-blueprints.mjs) so one percent coordinate system maps
+ * identically on every floor. Keep images and this ratio in sync.
+ */
+const BLUEPRINT_ASPECT = 650 / 435
 
 /** Legend colors from the developer's drawings. */
 export const MARKER_COLORS = {
@@ -377,5 +383,5 @@ export const INDOOR_BUILDING = {
   name: 'MST Building',
   floors: [1, 2, 3, 4],
   blueprintAspect: BLUEPRINT_ASPECT,
-  blueprint: (floor: number) => `/blueprints/mst-floor-${floor}.png`,
+  blueprint: (floor: number) => publicAsset(`blueprints/mst-floor-${floor}.png`),
 }

@@ -106,27 +106,31 @@ export function IndoorNavigator({ initialRoomId = null, onClose }: Props) {
             {roomsOnFloor(floor).map((room) => {
               const isSelected = room.id === selectedRoomId
               const isDestination = room.id === destinationId
+              // The dot marks the centre of the room rectangle.
+              const centerX = room.rect.x + room.rect.w / 2
+              const centerY = room.rect.y + room.rect.h / 2
+              // Dots in the right column label leftwards so names stay on screen.
+              const labelSide = centerX > 78 ? ' label-left' : ''
               return (
                 <button
                   key={room.id}
                   type="button"
                   className={
-                    'indoor-room' +
+                    'indoor-room-dot' +
                     (isSelected ? ' selected' : '') +
-                    (isDestination ? ' destination' : '')
+                    (isDestination ? ' destination' : '') +
+                    labelSide
                   }
                   style={{
-                    left: percent(room.rect.x),
-                    top: percent(room.rect.y),
-                    width: percent(room.rect.w),
-                    height: percent(room.rect.h),
+                    left: percent(centerX),
+                    top: percent(centerY),
                     '--room-color': ROOM_COLORS[room.kind],
                   } as React.CSSProperties}
                   onClick={() => selectRoom(room)}
                   title={room.name}
                   aria-label={`${room.name}, floor ${room.floor}`}
                 >
-                  <span>{room.name}</span>
+                  <span className="indoor-room-label">{room.name}</span>
                 </button>
               )
             })}

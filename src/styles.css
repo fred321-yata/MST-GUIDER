@@ -8,7 +8,8 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 .app-shell { width: min(100%, 560px); min-height: 100vh; margin: 0 auto; background: #f8faf6; padding-bottom: 90px; box-shadow: 0 0 70px #95a99b55; }
 .loading-screen { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; overflow: hidden; background: #153a36; color: white; animation: loading-in .45s ease both; }
-.loading-building { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; animation: loading-zoom 3s ease-out both; }
+/* Whole campus map stays in frame (no cropping); letterboxed on the dark background. */
+.loading-building { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; animation: loading-zoom 3s ease-out both; }
 .loading-shade { position: absolute; inset: 0; background: linear-gradient(180deg, #153a3644 0%, #153a36aa 75%, #153a36f2 100%); }
 .loading-content { position: relative; z-index: 1; display: grid; justify-items: center; width: min(86%, 360px); padding-top: 25vh; text-align: center; }
 .loading-intro-video { width: min(100%, 230px); height: 112px; margin-bottom: 18px; border: 2px solid #ffffffaa; border-radius: 10px; background: #153a36aa; box-shadow: 0 8px 25px #071e1b55; object-fit: cover; }
@@ -17,12 +18,16 @@ button:disabled { cursor: not-allowed; }
 .loading-logo-fallback { position: absolute; color: #153a36; font: 700 17px 'Space Grotesk'; letter-spacing: .06em; }
 .loading-kicker { margin: 22px 0 7px; color: #f2b45e; font-size: 10px; font-weight: 700; letter-spacing: .2em; }
 .loading-content h1 { margin: 0; color: #fff; font: 700 34px 'Space Grotesk'; letter-spacing: .04em; }
-.loading-progress { width: min(100%, 220px); height: 4px; margin-top: 28px; overflow: hidden; border-radius: 4px; background: #ffffff44; }
-.loading-progress span { display: block; width: 35%; height: 100%; border-radius: inherit; background: #f2b45e; animation: loading-progress 5s ease-in-out both; }
+/* Progress line drawn as a ring around the SEAIT logo (fills over the 5s load). */
+.loading-logo-ring { position: relative; display: grid; place-items: center; width: 124px; height: 124px; }
+.loading-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.loading-ring circle { fill: none; stroke-width: 4; }
+.loading-ring-track { stroke: #ffffff2e; }
+.loading-ring-progress { stroke: #f2b45e; stroke-linecap: round; stroke-dasharray: 289; stroke-dashoffset: 289; filter: drop-shadow(0 0 5px #f2b45e99); animation: loading-ring 5s ease-in-out both; }
+@keyframes loading-ring { from { stroke-dashoffset: 289; } to { stroke-dashoffset: 0; } }
 .loading-status { margin: 11px 0 0; color: #d2e0d8; font-size: 11px; }
 @keyframes loading-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes loading-zoom { from { transform: scale(1.04); } to { transform: scale(1); } }
-@keyframes loading-progress { from { width: 0; } to { width: 100%; } }
 .topbar { display: grid; grid-template-columns: 48px 1fr 42px; gap: 14px; align-items: center; padding: 24px 22px 18px; background: #f8faf6; }
 .brand-mark { position: relative; width: 46px; height: 46px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: #ee7d16; color: white; font-family: 'Space Grotesk'; font-size: 10px; font-weight: 700; border: 3px solid #153a36; }.brand-mark img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .eyebrow { margin: 0 0 4px; color: #df6e1a; font-size: 10px; font-weight: 700; letter-spacing: .14em; }
@@ -129,7 +134,7 @@ body { color: var(--space-paper); background: #06181e; background-image: linear-
 .map-grid { background-image: linear-gradient(#77e6d014 1px, transparent 1px), linear-gradient(90deg, #77e6d014 1px, transparent 1px); background-size: 42px 42px; }
 .map-grid::after { display: none; }
 .map-grid::before { background: radial-gradient(ellipse at 30% 20%, #204b48 0 11%, transparent 12%), radial-gradient(ellipse at 80% 75%, #1d4d47 0 15%, transparent 16%); }
-.loading-screen { background: #06181e; }.loading-shade { background: linear-gradient(180deg, #06181e11 0%, #06181e44 75%, #06181eaa 100%); }.loading-content { width: min(86%, 410px); padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }.loading-intro-video { border-color: #77e6d055; background: #081f24cc; }.loading-logo-wrap { border-color: var(--space-cyan); }.loading-kicker { color: var(--space-orange); }.loading-progress span { background-color: var(--space-orange); }
+.loading-screen { background: #06181e; }.loading-shade { background: linear-gradient(180deg, #06181e11 0%, #06181e44 75%, #06181eaa 100%); }.loading-content { width: min(86%, 410px); padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }.loading-intro-video { border-color: #77e6d055; background: #081f24cc; }.loading-logo-wrap { border-color: var(--space-cyan); }.loading-kicker { color: var(--space-orange); }.loading-ring-track { stroke: #77e6d03d; }.loading-ring-progress { stroke: var(--space-orange); filter: drop-shadow(0 0 5px #ff9a3daa); }
 .search-panel, .navigate-screen { border: 1px solid #77e6d033; border-radius: 16px; background: #0d3030aa; box-shadow: 0 18px 45px #020d1255, inset 0 1px #ffffff0d; }.search-panel { padding: 26px; }.navigate-screen { padding: 22px; }.search-field:focus-within { border-color: var(--space-cyan); box-shadow: 0 0 0 3px #77e6d01a; }.place-row:hover { border-color: #77e6d077; background: #174641; }.back-button { color: var(--space-cyan); }.route-line + .route-line { border-color: #77e6d033; }.route-line span { border-color: #123b39; }
 .viewer-overlay { background: #06181e; }.viewer-topbar { padding-top: 26px; padding-bottom: 24px; background: #081f24f2; }.viewer-topbar h2 { letter-spacing: .01em; }.viewer-close:hover, .viewer-mode:hover { border-color: var(--space-cyan); background: #77e6d01a; }.panorama { background: #071d25; }.viewer-hint { border: 1px solid #77e6d033; background: #081f24d9; box-shadow: 0 8px 24px #020d1255; }.sphere-panorama { background: #071d25; }
 
@@ -142,8 +147,6 @@ body { color: var(--space-paper); background: #06181e; background-image: linear-
 .campus-overlay-svg { position: absolute; z-index: 4; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .route-polyline { fill: none; stroke: var(--space-orange); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 6px #ff9a3daa); }
 .route-polyline-casing { fill: none; stroke: #06181e; stroke-width: 5.4; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; opacity: .75; }
-.map-place-marker { position: absolute; z-index: 5; transform: translate(-50%, -100%); padding: 6px 10px 7px; border: 2px solid #fff; border-radius: 12px 12px 12px 3px; background: var(--space-orange); color: #14282a; box-shadow: 0 5px 14px #020d1288; font: 700 9px 'Space Grotesk'; letter-spacing: .05em; }
-.map-place-marker:hover { background: #ffb063; }
 .map-destination-pin { position: absolute; z-index: 6; display: grid; place-items: center; width: 34px; height: 34px; transform: translate(-50%, -50%); border: 3px solid #fff; border-radius: 50%; background: #d64541; color: #fff; box-shadow: 0 6px 16px #020d1288; font-size: 15px; }
 .navigation-user.on-map { width: 28px; height: 28px; z-index: 7; }
 .navigation-user.on-map::before { width: 22px; height: 22px; }
@@ -185,11 +188,16 @@ body { color: var(--space-paper); background: #06181e; background-image: linear-
 .indoor-blueprint-image { display: block; width: 100%; height: 100%; object-fit: fill; }
 .indoor-overlay-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .indoor-route-line { fill: none; stroke: var(--space-orange); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 5px #ff9a3daa); }
-.indoor-room { position: absolute; display: grid; place-items: center; padding: 0; border: 1.5px solid #ffffffcc; border-radius: 4px; background: color-mix(in srgb, var(--room-color) 55%, transparent); color: #fff; font: 700 clamp(7px, 1.1vw, 11px) 'Space Grotesk'; letter-spacing: .02em; text-shadow: 0 1px 2px #00000088; cursor: pointer; overflow: hidden; transition: background .15s ease, outline .15s ease; }
-.indoor-room:hover { background: color-mix(in srgb, var(--room-color) 85%, transparent); outline: 2px solid #fff; }
-.indoor-room.selected { outline: 3px solid var(--space-cyan); background: color-mix(in srgb, var(--room-color) 90%, transparent); z-index: 3; }
-.indoor-room.destination { outline: 3px solid var(--space-orange); background: color-mix(in srgb, #ff9a3d 70%, var(--room-color)); z-index: 3; }
-.indoor-room span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; padding: 1px; text-align: center; }
+/* Rooms are dots at the room centre — the blueprint drawing itself shows the outline. */
+.indoor-room-dot { position: absolute; z-index: 2; width: 13px; height: 13px; padding: 0; transform: translate(-50%, -50%); border: 2px solid #ffffffdd; border-radius: 50%; background: var(--room-color); box-shadow: 0 1px 5px #00000066; cursor: pointer; transition: box-shadow .15s ease, background .15s ease; }
+.indoor-room-dot:hover { z-index: 4; box-shadow: 0 0 0 3px #ffffff88; }
+.indoor-room-dot.selected { z-index: 5; box-shadow: 0 0 0 3px var(--space-cyan); }
+.indoor-room-dot.destination { z-index: 5; background: var(--space-orange); box-shadow: 0 0 0 3px var(--space-orange); }
+/* Room names sit beside their dot and are always visible. */
+.indoor-room-label { position: absolute; top: 50%; left: calc(100% + 4px); max-width: 88px; padding: 1px 5px; transform: translateY(-50%); border-radius: 5px; background: #06181ed9; color: #fff; font: 700 clamp(7px, .95vw, 9.5px)/1.18 'Space Grotesk'; white-space: normal; overflow-wrap: break-word; pointer-events: none; }
+.indoor-room-dot.label-left .indoor-room-label { left: auto; right: calc(100% + 4px); }
+.indoor-room-dot.selected .indoor-room-label { background: var(--space-cyan); color: #0b2a2a; }
+.indoor-room-dot.destination .indoor-room-label { background: var(--space-orange); color: #14282a; }
 .indoor-marker { position: absolute; z-index: 4; width: 14px; height: 14px; transform: translate(-50%, -50%); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 8px #020d1288; pointer-events: auto; cursor: help; }
 .indoor-marker.marker-stairs { border-radius: 4px; }
 .indoor-legend { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 9px 12px; border: 1px solid #77e6d033; border-radius: 10px; background: #0d3030aa; color: #c5e5d8; font-size: 10px; }

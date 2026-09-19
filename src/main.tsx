@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import './styles.css'
+import { publicAsset } from './campus/assets'
 import { CAMPUS_IMAGE_ASPECT, formatDistance, gpsFromImagePercent, imagePercentFromGps, isInsideCampus } from './campus/geo'
 import type { LatLng, Point2D } from './campus/geo'
 import { CAMPUS_NODES, CAMPUS_PLACES, PENDING_STREET_VIEW_POINTS, STREET_VIEW_POINTS, searchCampus, targetForHit } from './campus/model'
@@ -22,6 +23,36 @@ type Screen = 'map' | 'search' | 'navigate'
 
 const ARRIVAL_RADIUS = 8
 const OFF_ROUTE_LIMIT = 25
+const THEME_KEY = 'school-guider-theme'
+
+/**
+ * localStorage throws in sandboxed iframes and when storage/cookies are
+ * blocked, which would take the whole app down — so every access is guarded.
+ */
+function readStoredTheme(): 'dark' | 'light' | null {
+  try {
+    const value = window.localStorage.getItem(THEME_KEY)
+    return value === 'light' || value === 'dark' ? value : null
+  } catch {
+    return null
+  }
+}
+
+function storeTheme(theme: 'dark' | 'light') {
+  try {
+    window.localStorage.setItem(THEME_KEY, theme)
+  } catch {
+    // Storage unavailable: the theme still works, it just is not remembered.
+  }
+}
+
+function prefersLightTheme(): boolean {
+  try {
+    return window.matchMedia?.('(prefers-color-scheme: light)')?.matches ?? false
+  } catch {
+    return false
+  }
+}
 
 /** Demo walk (gate → MST entrance) used when GPS is unavailable, e.g. laptop preview. */
 const DEMO_WAYPOINTS_GPS: LatLng[] = [
@@ -33,16 +64,11 @@ const DEMO_WAYPOINTS_GPS: LatLng[] = [
 
 function App() {
   const [isLoading, setIsLoading] = useState(true)
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    const savedTheme = window.localStorage.getItem('school-guider-theme')
-    if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
-  })
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => readStoredTheme() ?? (prefersLightTheme() ? 'light' : 'dark'))
   const [screen, setScreen] = useState<Screen>('map')
   const [selectedHit, setSelectedHit] = useState<SearchHit | null>(null)
   const [isMapFullscreen, setIsMapFullscreen] = useState(false)
   const [isViewerOpen, setIsViewerOpen] = useState(false)
-  const [viewerPoint, setViewerPoint] = useState<number | null>(null)
   const [navigationTarget, setNavigationTarget] = useState<{ label: string; nodeId: string } | null>(null)
   const [indoorRoomId, setIndoorRoomId] = useState<string | null>(null)
   const [isIndoorOpen, setIsIndoorOpen] = useState(false)
@@ -63,7 +89,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    window.localStorage.setItem('school-guider-theme', theme)
+    storeTheme(theme)
   }, [theme])
 
   useEffect(() => {
@@ -80,11 +106,17 @@ function App() {
   )
 
   const toggleMapFullscreen = async () => {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen()
-      return
+    // Fullscreen is unsupported on some mobile browsers and can be rejected by
+    // permissions policy — never let that bubble up as an app error.
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen?.()
+        return
+      }
+      await mapCardRef.current?.requestFullscreen?.()
+    } catch {
+      // Ignored: the map simply stays in its normal layout.
     }
-    await mapCardRef.current?.requestFullscreen()
   }
 
   const startLocationTracking = () => {
@@ -141,10 +173,8 @@ function App() {
     setScreen('map')
   }
 
-  const open360Viewer = (point: number | null) => {
-    setViewerPoint(point)
-    setIsViewerOpen(true)
-  }
+  // Always opens on the SEAIT map, where the numbered 1–20 points pick a 360 view.
+  const open360Viewer = () => setIsViewerOpen(true)
 
   const openIndoorNavigator = (roomId: string | null) => {
     setIndoorRoomId(roomId)
@@ -159,7 +189,7 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand-mark" aria-label="SEAIT logo"><span>SEAIT</span><img src="/publicseait-logo.png.jpg" alt="" onError={(event) => { event.currentTarget.style.display = 'none' }} /></div>
+        <div className="brand-mark" aria-label="SEAIT logo"><span>SEAIT</span><img src={publicAsset('publicseait-logo.png.jpg')} alt="" onError={(event) => { event.currentTarget.style.display = 'none' }} /></div>
         <div>
           <p className="eyebrow">SEAIT CAMPUS GUIDE</p>
           <h1>SEAIT (SOUTH EAST ASIA INSTITUTE OF TECHNOLOGY)</h1>
@@ -194,26 +224,17 @@ function App() {
               <div className="map-controls">
                 <button className={locationStatus !== 'idle' || isDemoWalking ? 'map-control active' : 'map-control'} onClick={toggleLocationTracking} aria-label="Show my location on campus" title="Show my location">◉</button>
                 <button className="map-control" onClick={() => openIndoorNavigator(null)} aria-label="Open MST building blueprint" title="MST building blueprint">🏢</button>
-                <button className="map-control" onClick={() => open360Viewer(null)} aria-label="Open campus 360 views" title="Campus 360 views">◎</button>
+                <button className="map-control" onClick={open360Viewer} aria-label="Open SEAIT map with 360 points" title="Campus 360 views">◎</button>
                 <button className="map-control" onClick={() => setScreen('search')} aria-label="Search places">⌕</button>
                 <button className="map-control" onClick={toggleMapFullscreen} aria-label={isMapFullscreen ? 'Exit fullscreen map' : 'Open fullscreen map'}>{isMapFullscreen ? '×' : '⛶'}</button>
               </div>
               <div className="map-copy"><span className="status-dot" />School Guider campus map<div className="map-subtitle">Offline · SEAIT campus only</div></div>
-              <CampusMapCanvas
-                userPercent={userPercent}
-                route={null}
-                destinationPercent={null}
-                showPlaceMarkers
-                onPlaceMarker={(placeId) => {
-                  const place = CAMPUS_PLACES.find((candidate) => candidate.id === placeId)
-                  if (place) openPlace({ kind: 'place', place })
-                }}
-              />
+              <CampusMapCanvas userPercent={userPercent} route={null} destinationPercent={null} />
             </section>
 
             <section className="front-view-card panel-enter" aria-label="SEAIT front view">
               <div className="front-view-heading"><div><p className="eyebrow">CAMPUS VIEW</p><h2>Front view</h2></div></div>
-              <img className="dashboard-front-image" src="/d5bdb47f-2c38-4f94-9830-01634591a7fc.png" alt="Front view of the SEAIT building" />
+              <img className="dashboard-front-image" src={publicAsset('d5bdb47f-2c38-4f94-9830-01634591a7fc.png')} alt="Front view of the SEAIT building" />
             </section>
 
             <section className="section-heading">
@@ -236,7 +257,7 @@ function App() {
         <button className={screen === 'navigate' ? 'nav-item active' : 'nav-item'} onClick={() => setScreen('navigate')}><span>↗</span><small>Navigate</small></button>
       </nav>
 
-      {isViewerOpen && <CampusViewer initialPoint={viewerPoint} onClose={() => setIsViewerOpen(false)} />}
+      {isViewerOpen && <CampusViewer onClose={() => setIsViewerOpen(false)} />}
       {isIndoorOpen && <IndoorNavigator initialRoomId={indoorRoomId} onClose={() => setIsIndoorOpen(false)} />}
       {navigationTarget && (
         <NavigationOverlay
@@ -276,14 +297,10 @@ function CampusMapCanvas({
   userPercent,
   route,
   destinationPercent,
-  showPlaceMarkers = false,
-  onPlaceMarker,
 }: {
   userPercent: Point2D | null
   route: CampusRoute | null
   destinationPercent: Point2D | null
-  showPlaceMarkers?: boolean
-  onPlaceMarker?: (placeId: string) => void
 }) {
   const gridRef = useRef<HTMLDivElement>(null)
   const [frame, setFrame] = useState({ width: 0, height: 0 })
@@ -305,27 +322,11 @@ function CampusMapCanvas({
 
   return (
     <div ref={gridRef} className="map-grid" aria-label="Campus map">
-      <img className="aerial-image" src="/campus-aerial.jpg.png" alt="Upper view of the SEAIT campus" onError={(event) => { event.currentTarget.style.display = 'none' }} />
+      <img className="aerial-image" src={publicAsset('campus-aerial.jpg.png')} alt="Upper view of the SEAIT campus" onError={(event) => { event.currentTarget.style.display = 'none' }} />
       <svg className="campus-overlay-svg" viewBox={`0 0 ${frame.width || 100} ${frame.height || 100}`} preserveAspectRatio="none" aria-hidden="true">
         {route && <polyline className="route-polyline-casing" points={route.linePercent.map((point) => `${displayed.left + (point.x / 100) * displayed.width},${displayed.top + (point.y / 100) * displayed.height}`).join(' ')} />}
         {route && <polyline className="route-polyline" points={route.linePercent.map((point) => `${displayed.left + (point.x / 100) * displayed.width},${displayed.top + (point.y / 100) * displayed.height}`).join(' ')} />}
       </svg>
-      {showPlaceMarkers &&
-        CAMPUS_PLACES.map((place) => {
-          const position = nodeImagePercentCached(place.nodeId)
-          return (
-            <button
-              key={place.id}
-              type="button"
-              className="map-place-marker"
-              style={{ left: `${displayed.left + (position.x / 100) * displayed.width}px`, top: `${displayed.top + (position.y / 100) * displayed.height}px` }}
-              onClick={() => onPlaceMarker?.(place.id)}
-              aria-label={`Show ${place.name}`}
-            >
-              {place.id === 'mst-building' ? 'MST' : 'FIELD'}
-            </button>
-          )
-        })}
       {destinationPercent && (
         <div className="map-destination-pin" style={{ left: `${displayed.left + (destinationPercent.x / 100) * displayed.width}px`, top: `${displayed.top + (destinationPercent.y / 100) * displayed.height}px` }} aria-label="Destination"><span>★</span></div>
       )}
@@ -397,7 +398,7 @@ function SearchScreen({
   )
 }
 
-function PlaceDetailCard({ hit, onNavigate, onView360, onOpenIndoor }: { hit: SearchHit; onNavigate: () => void; onView360: (point: number | null) => void; onOpenIndoor: () => void }) {
+function PlaceDetailCard({ hit, onNavigate, onView360, onOpenIndoor }: { hit: SearchHit; onNavigate: () => void; onView360: () => void; onOpenIndoor: () => void }) {
   const has360 = hitHas360(hit)
   const label = hitLabel(hit)
   const isMstBuilding = hit.kind === 'place' && hit.place.id === 'mst-building'
@@ -413,7 +414,7 @@ function PlaceDetailCard({ hit, onNavigate, onView360, onOpenIndoor }: { hit: Se
       <div className="place-actions">
         <button className="primary-button" onClick={onNavigate}>↗ Directions</button>
         {isMstBuilding && <button className="secondary-button" onClick={onOpenIndoor}>🏢 Blueprint</button>}
-        <button className="secondary-button" disabled={!has360} onClick={() => onView360(20)}>{has360 ? '360° View' : '360° unavailable'}</button>
+        <button className="secondary-button" disabled={!has360} onClick={onView360}>{has360 ? '360° Map' : '360° unavailable'}</button>
       </div>
     </article>
   )
@@ -606,16 +607,22 @@ function useSimulatedWalk(active: boolean, waypoints: LatLng[]) {
 function LoadingScreen() {
   return (
     <main className="loading-screen" aria-label="Loading School Guider">
-      <img className="loading-building" src="/campus-aerial.jpg.png" alt="SEAIT campus aerial view" />
+      <img className="loading-building" src={publicAsset('campus-aerial.jpg.png')} alt="SEAIT campus aerial view" />
       <div className="loading-shade" />
       <div className="loading-content">
-        <video className="loading-intro-video" src="/publicintro-video.mp4.mp4" autoPlay muted loop playsInline aria-label="SEAIT introduction video" onError={(event) => { event.currentTarget.style.display = 'none' }} />
-        <div className="loading-logo-wrap">
-          <img className="loading-logo" src="/publicseait-logo.png.jpg" alt="SEAIT logo" onError={(event) => { event.currentTarget.style.display = 'none' }} />
+        <video className="loading-intro-video" src={publicAsset('publicintro-video.mp4.mp4')} autoPlay muted loop playsInline aria-label="SEAIT introduction video" onError={(event) => { event.currentTarget.style.display = 'none' }} />
+        {/* The 5s progress arc is drawn in a ring hugging the logo. */}
+        <div className="loading-logo-ring" role="progressbar" aria-label="Loading progress">
+          <svg className="loading-ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle className="loading-ring-track" cx="50" cy="50" r="46" />
+            <circle className="loading-ring-progress" cx="50" cy="50" r="46" />
+          </svg>
+          <div className="loading-logo-wrap">
+            <img className="loading-logo" src={publicAsset('publicseait-logo.png.jpg')} alt="SEAIT logo" onError={(event) => { event.currentTarget.style.display = 'none' }} />
+          </div>
         </div>
         <p className="loading-kicker">SCHOOL GUIDER</p>
         <h1>SEAIT</h1>
-        <div className="loading-progress" aria-hidden="true"><span /></div>
         <p className="loading-status">Preparing your campus guide</p>
       </div>
     </main>
@@ -629,6 +636,7 @@ function CampusViewer({ onClose, initialPoint = null }: { onClose: () => void; i
   const [selectedPoint, setSelectedPoint] = useState<number | null>(initialPoint)
   const [viewerMode, setViewerMode] = useState<'map' | 'walking'>(initialPoint ? 'walking' : 'map')
   const [failedPanorama, setFailedPanorama] = useState(false)
+  const [sphereUnavailable, setSphereUnavailable] = useState(false)
   const mapDragRef = useRef({ active: false, startX: 0, startY: 0, startOffset: { x: 0, y: 0 } })
 
   const activePanorama = STREET_VIEW_POINTS.find((entry) => entry.point === selectedPoint)?.panorama ?? null
@@ -636,11 +644,21 @@ function CampusViewer({ onClose, initialPoint = null }: { onClose: () => void; i
   useEffect(() => {
     if (viewerMode !== 'walking' || !sphereRef.current) return
     setFailedPanorama(false)
+    setSphereUnavailable(false)
     const container = sphereRef.current
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 100)
     camera.position.set(0, 0, 0.01)
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    // WebGL can be missing on the web (hardware acceleration off, blocked by
+    // policy, old webviews). Throwing here would take the whole app down, so
+    // fall back to a plain message instead.
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true })
+    } catch {
+      setSphereUnavailable(true)
+      return
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(container.clientWidth, container.clientHeight)
     container.appendChild(renderer.domElement)
@@ -652,7 +670,7 @@ function CampusViewer({ onClose, initialPoint = null }: { onClose: () => void; i
     scene.add(sphere)
     const textureLoader = new THREE.TextureLoader()
     textureLoader.load(
-      activePanorama ?? '/point-20-360.jpg.jpg',
+      activePanorama ?? publicAsset('point-20-360.jpg.jpg'),
       (texture) => {
         texture.colorSpace = THREE.SRGBColorSpace
         texture.wrapS = THREE.RepeatWrapping
@@ -747,7 +765,7 @@ function CampusViewer({ onClose, initialPoint = null }: { onClose: () => void; i
       <div className={viewerMode === 'map' ? 'panorama map-panorama' : 'panorama'} onPointerDown={startMapPan} onPointerMove={moveMapPan} onPointerUp={stopMapPan} onPointerCancel={stopMapPan}>
         {viewerMode === 'map' ? (
           <div className="map-content-layer" style={{ transform: `translate(${mapOffset.x}px, ${mapOffset.y}px) scale(${mapZoom})` }}>
-            <img src="/campus-aerial.jpg.png" alt="Upper view of the SEAIT campus" />
+            <img src={publicAsset('campus-aerial.jpg.png')} alt="Upper view of the SEAIT campus" />
             <div className="building-point-layer" aria-label="Street view capture points">
               {STREET_VIEW_POINTS.map((entry) => (
                 <button key={`p${entry.point}`} type="button" className="building-point available" style={{ left: `${entry.image.x}%`, top: `${entry.image.y}%` }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); handlePointClick(entry.point, null) }} aria-label={`Open 360 view for point ${entry.point}`}>
@@ -764,6 +782,12 @@ function CampusViewer({ onClose, initialPoint = null }: { onClose: () => void; i
               })}
             </div>
           </div>
+        ) : sphereUnavailable ? (
+          <div className="walking-placeholder" role="status">
+            <span>360° VIEW UNAVAILABLE</span>
+            <strong>This browser cannot show spherical views</strong>
+            <small>WebGL is disabled or unsupported here. Switch back to the SEAIT map to keep exploring, or open the app in Chrome or Safari on your phone.</small>
+          </div>
         ) : (
           <div ref={sphereRef} className="sphere-panorama" aria-label="360 walking area panorama" />
         )}
@@ -774,7 +798,9 @@ function CampusViewer({ onClose, initialPoint = null }: { onClose: () => void; i
           </div>
         )}
         <div className="viewer-hint">
-          {viewerMode === 'walking'
+          {viewerMode === 'walking' && sphereUnavailable
+            ? 'Spherical 360 view needs WebGL — the rest of the guide works normally'
+            : viewerMode === 'walking'
             ? failedPanorama
               ? '360 image missing for this point — add it to /public and register it in src/campus/model.ts'
               : 'Drag to look around'

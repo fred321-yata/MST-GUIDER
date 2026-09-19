@@ -31,7 +31,13 @@ npm install
 npm run dev
 ```
 
-Open the printed localhost URL. No location permission is needed to explore: the navigation overlay offers a **demo walk** that simulates a person walking from the gate to the MST entrance.
+The dev server binds `http://127.0.0.1:5173/` (see `vite.config.ts`). No location permission is needed to explore: the navigation overlay offers a **demo walk** that simulates a person walking from the gate to the MST entrance.
+
+## Host it as a website
+
+`npm run build` writes a self-contained site to `dist/` — upload that folder to any static host (Netlify, Vercel, GitHub Pages, cPanel, S3). Every URL in the build is relative (`./assets/…`, `./campus-aerial.jpg.png`, `./blueprints/…`), so the same build works at the domain root, in a subfolder such as `https://school.edu/guider/`, and inside the Capacitor webView. Nothing else is required: no server, database, API key or location permission. Check the build locally with `npm run preview`.
+
+The app keeps working when a browser blocks storage (sandboxed iframes, cookies disabled) or WebGL (360° views then show a fallback message), so a strict host cannot blank the page.
 
 ## Build Android APK
 

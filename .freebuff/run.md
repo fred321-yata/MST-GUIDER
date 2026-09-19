@@ -8,7 +8,7 @@
 
 ## Run the server
 
-1. `npm run dev` (Vite). Default port **5173**; use `-- --host 127.0.0.1 --port 5173` to pin it.
+1. `npm run dev` (Vite). `vite.config.ts` already pins host `127.0.0.1` and port **5173**, so no flags are needed — if the port is busy, stop the stale Vite process first instead of letting it drift to 5174 (the preview is registered against 5173).
 2. Register the preview with the Vite process id and `http://127.0.0.1:5173/`.
 3. Sanity checks: `/` renders the campus map; `/selftest.html` must print `RESULT: ALL 21 PASSED` (and title `SELFTEST-PASS`).
 
